@@ -1,0 +1,68 @@
+{
+  "name": "n8n-nodes-cursor-agent",
+  "version": "2.1.0",
+  "description": "n8n community node — run Cursor Agent via the Cursor SDK (local runtime) with MCP servers and skills.",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "cursor",
+    "agent",
+    "mcp",
+    "sdk"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "liuhuayao",
+    "email": "liuhuayao@126.com"
+  },
+  "homepage": "https://github.com/liuhauyao/n8n-nodes-cursor-agent#readme",
+  "bugs": {
+    "url": "https://github.com/liuhauyao/n8n-nodes-cursor-agent/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liuhauyao/n8n-nodes-cursor-agent.git"
+  },
+  "main": "dist/nodes/CursorAgent/CursorAgent.node.js",
+  "scripts": {
+    "build": "tsc && npm run copy-assets",
+    "prepack": "npm run build",
+    "copy-assets": "copyfiles \"nodes/**/*.svg\" \"credentials/*.svg\" dist/",
+    "verify": "npm run build && eslint dist && node scripts/lint-package-json.mjs",
+    "lint": "eslint dist && node scripts/lint-package-json.mjs",
+    "dev": "tsc --watch",
+    "poc": "node scripts/poc-local.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.16"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/CursorApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/CursorAgent/CursorAgent.node.js"
+    ]
+  },
+  "dependencies": {
+    "@cursor/sdk": "1.0.13",
+    "redis": "4.7.0"
+  },
+  "devDependencies": {
+    "@n8n/eslint-plugin-community-nodes": "^0.15.0",
+    "@types/node": "^22.0.0",
+    "copyfiles": "^2.4.1",
+    "eslint": "^9.29.0",
+    "n8n-workflow": ">=1.82.0",
+    "typescript": "~5.7.0"
+  },
+  "peerDependencies": {
+    "n8n-workflow": ">=1.82.0"
+  }
+}
