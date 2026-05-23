@@ -9,11 +9,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     permissions:
       contents: read
-      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,7 +19,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          registry-url: https://registry.npmjs.org
           cache: npm
 
       - name: Install dependencies
@@ -31,9 +27,17 @@ jobs:
       - name: Build and lint
         run: npm run verify
 
-      - name: Verify npm auth
-        run: npm whoami || echo "::warning::npm whoami failed — check NPM_TOKEN secret (Automation token, publish permission)"
-        continue-on-error: true
+      - name: Configure npm registry auth
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          test -n "$NPM_TOKEN" || (echo "::error::NPM_TOKEN secret is empty" && exit 1)
+          # Trim accidental trailing newline from secret paste
+          TOKEN="$(printf '%s' "$NPM_TOKEN" | tr -d '\n\r')"
+          printf '%s\n' "//registry.npmjs.org/:_authToken=${TOKEN}" > ~/.npmrc
+          printf '%s\n' "always-auth=true" >> ~/.npmrc
+          echo "Token length: ${#TOKEN} chars"
+          npm whoami
 
       - name: Publish if version not on npm
         run: |
@@ -42,10 +46,4 @@ jobs:
             echo "Version ${VERSION} already on npm, skip publish."
             exit 0
           fi
-          # Provenance requires npm Trusted Publisher (GitHub repo linked). Fallback without it.
-          if npm publish --provenance --access public; then
-            echo "Published ${VERSION} with provenance."
-          else
-            echo "Provenance publish failed; retrying without --provenance..."
-            npm publish --access public
-          fi
+          npm publish --access public
