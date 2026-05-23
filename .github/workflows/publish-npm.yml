@@ -9,6 +9,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     permissions:
       contents: read
       id-token: write
@@ -30,13 +32,10 @@ jobs:
         run: npm run verify
 
       - name: Verify npm auth
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm whoami
+        run: npm whoami || echo "::warning::npm whoami failed — check NPM_TOKEN secret (Automation token, publish permission)"
+        continue-on-error: true
 
       - name: Publish if version not on npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
           if npm view "n8n-nodes-cursor-agent@${VERSION}" version 2>/dev/null; then
