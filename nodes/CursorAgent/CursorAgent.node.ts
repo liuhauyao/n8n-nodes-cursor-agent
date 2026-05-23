@@ -1,12 +1,4 @@
 import {
-	Agent,
-	Cursor,
-	CursorAgentError,
-	type InteractionUpdate,
-	type SDKAgent,
-	type SettingSource,
-} from '@cursor/sdk';
-import {
 	NodeConnectionTypes,
 	NodeOperationError,
 	type IDataObject,
@@ -17,8 +9,10 @@ import {
 	type INodeType,
 	type INodeTypeDescription,
 } from 'n8n-workflow';
+import type { InteractionUpdate, SDKAgent, SettingSource } from '@cursor/sdk';
 
 import { parseMcpServers, type McpServersFormValue } from './lib/parseMcpServers';
+import { loadCursorSdk } from './lib/loadCursorSdk';
 import { resolveCursorApiKey } from './lib/resolveApiKey';
 import { resolveLocalCwd } from './lib/resolveLocalCwd';
 import { CursorStreamAssembler } from './lib/streamAdapter';
@@ -38,6 +32,7 @@ const SETTING_SOURCE_OPTIONS: INodePropertyOptions[] = [
 
 async function getModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 	try {
+		const { Cursor } = await loadCursorSdk();
 		const apiKey = await resolveCursorApiKey(this);
 		const models = await Cursor.models.list({ apiKey });
 		const options = models
@@ -354,6 +349,15 @@ export class CursorAgent implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
+
+		let Agent: Awaited<ReturnType<typeof loadCursorSdk>>['Agent'];
+		let CursorAgentError: Awaited<ReturnType<typeof loadCursorSdk>>['CursorAgentError'];
+		try {
+			({ Agent, CursorAgentError } = await loadCursorSdk());
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			throw new NodeOperationError(this.getNode(), message);
+		}
 
 		let apiKey: string;
 		try {

@@ -30,6 +30,26 @@ Settings → Community Nodes → Install → 输入 `n8n-nodes-cursor-agent`
 
 在 `N8N_COMMUNITY_PACKAGES` 或 `package.json` 中加入依赖后重启 n8n。
 
+### Linux：sqlite3 原生模块（常见安装报错）
+
+`@cursor/sdk` 依赖 `sqlite3` 原生绑定。若社区节点安装时报 `Could not locate the bindings file` / `node_sqlite3.node`：
+
+1. 在 n8n 宿主机安装编译工具（Debian/Ubuntu 示例）：
+
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y python3 make g++
+   ```
+
+2. 进入社区节点安装目录并重建 sqlite3（路径以你的环境为准）：
+
+   ```bash
+   cd ~/.n8n/nodes/node_modules/n8n-nodes-cursor-agent
+   npm rebuild sqlite3 --build-from-source
+   ```
+
+3. 重启 n8n，或在 UI 中卸载后重新安装 `n8n-nodes-cursor-agent`（2.1.1+ 会在 `postinstall` 中尝试自动 rebuild）。
+
 ---
 
 ## 节点参数
