@@ -29,6 +29,11 @@ jobs:
       - name: Build and lint
         run: npm run verify
 
+      - name: Verify npm auth
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm whoami
+
       - name: Publish if version not on npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -38,4 +43,10 @@ jobs:
             echo "Version ${VERSION} already on npm, skip publish."
             exit 0
           fi
-          npm publish --provenance --access public
+          # Provenance requires npm Trusted Publisher (GitHub repo linked). Fallback without it.
+          if npm publish --provenance --access public; then
+            echo "Published ${VERSION} with provenance."
+          else
+            echo "Provenance publish failed; retrying without --provenance..."
+            npm publish --access public
+          fi
