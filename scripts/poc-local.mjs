@@ -15,7 +15,7 @@
  *   POC_MCP_SERVERS_JSON='{"demo":{"type":"http","url":"https://example.com/mcp"}}' \
  *   npm run poc
  */
-import { Agent } from '@cursor/sdk';
+import { Agent, createAgentPlatform } from '@cursor/sdk';
 
 const apiKey = process.env.CURSOR_API_KEY;
 const cwd = process.env.POC_CWD?.trim();
@@ -26,6 +26,27 @@ const mcpServersJson = process.env.POC_MCP_SERVERS_JSON?.trim() ?? '';
 if (!apiKey || !cwd) {
 	console.error('Missing CURSOR_API_KEY or POC_CWD');
 	process.exit(1);
+}
+
+const rgCandidates = [
+	'@cursor/sdk-linux-x64/bin/rg',
+	'@cursor/sdk-linux-arm64/bin/rg',
+	'@cursor/sdk-darwin-arm64/bin/rg',
+	'@cursor/sdk-darwin-x64/bin/rg',
+];
+let ripgrepPath;
+for (const mod of rgCandidates) {
+	try {
+		ripgrepPath = new URL(await import.meta.resolve(mod)).pathname;
+		break;
+	} catch {
+		// try next platform package
+	}
+}
+if (ripgrepPath) {
+	await createAgentPlatform({ ripgrepPath });
+} else {
+	console.warn('No @cursor/sdk-* platform package found; ripgrep may be unconfigured');
 }
 
 let mcpServers;

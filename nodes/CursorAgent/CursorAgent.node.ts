@@ -12,6 +12,7 @@ import {
 import type { InteractionUpdate, SDKAgent, SettingSource } from '@cursor/sdk';
 
 import { parseMcpServers, type McpServersFormValue } from './lib/parseMcpServers';
+import { ensureCursorPlatform } from './lib/ensureCursorPlatform';
 import { loadCursorSdk } from './lib/loadCursorSdk';
 import { resolveCursorApiKey } from './lib/resolveApiKey';
 import { resolveLocalCwd } from './lib/resolveLocalCwd';
@@ -352,8 +353,11 @@ export class CursorAgent implements INodeType {
 
 		let Agent: Awaited<ReturnType<typeof loadCursorSdk>>['Agent'];
 		let CursorAgentError: Awaited<ReturnType<typeof loadCursorSdk>>['CursorAgentError'];
+		let sdk: Awaited<ReturnType<typeof loadCursorSdk>>;
 		try {
-			({ Agent, CursorAgentError } = await loadCursorSdk());
+			sdk = await loadCursorSdk();
+			({ Agent, CursorAgentError } = sdk);
+			await ensureCursorPlatform(sdk);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			throw new NodeOperationError(this.getNode(), message);
@@ -485,7 +489,14 @@ export class CursorAgent implements INodeType {
 					await assembler.end();
 
 					if (result.status === 'error') {
-						throw new NodeOperationError(this.getNode(), 'Cursor agent run failed', { itemIndex });
+						const detail = ('result' in result ? result.result?.trim() : undefined)
+							|| assembler.getTextOutput()?.trim()
+							|| 'no error detail from SDK (check n8n logs for ConnectError / proxy issues)';
+						throw new NodeOperationError(
+							this.getNode(),
+							`Cursor agent run failed: ${detail}`,
+							{ itemIndex },
+						);
 					}
 
 					if (sessionId && agent.agentId) {
