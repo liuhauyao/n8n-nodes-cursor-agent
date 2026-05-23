@@ -32,11 +32,16 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           test -n "$NPM_TOKEN" || (echo "::error::NPM_TOKEN secret is empty" && exit 1)
-          # Trim accidental trailing newline from secret paste
           TOKEN="$(printf '%s' "$NPM_TOKEN" | tr -d '\n\r')"
+          PREFIX="${TOKEN:0:4}"
+          echo "Token length: ${#TOKEN} chars, prefix: ${PREFIX}***"
+          case "$PREFIX" in
+            npm_) echo "Token format looks like npm access token" ;;
+            ghp_|github) echo "::error::NPM_TOKEN looks like a GitHub token — use npmjs.com Automation/Granular token instead" && exit 1 ;;
+            *) echo "::warning::Unexpected token prefix (expected npm_)" ;;
+          esac
           printf '%s\n' "//registry.npmjs.org/:_authToken=${TOKEN}" > ~/.npmrc
           printf '%s\n' "always-auth=true" >> ~/.npmrc
-          echo "Token length: ${#TOKEN} chars"
           npm whoami
 
       - name: Publish if version not on npm
