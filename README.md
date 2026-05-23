@@ -28,27 +28,31 @@ Settings → Community Nodes → Install → 输入 `n8n-nodes-cursor-agent`
 
 ### Docker / 自托管
 
-在 `N8N_COMMUNITY_PACKAGES` 或 `package.json` 中加入依赖后重启 n8n。
+在 `N8N_COMMUNITY_PACKAGES` 或 `~/.n8n/nodes/package.json` 中加入本包后重启 n8n。
 
-### Linux：sqlite3 原生模块（常见安装报错）
+### 宿主依赖（必配，符合 n8n 社区节点规范）
 
-`@cursor/sdk` 依赖 `sqlite3` 原生绑定。若社区节点安装时报 `Could not locate the bindings file` / `node_sqlite3.node`：
+本包 **不含** runtime `dependencies`（n8n 社区节点规范要求）。`@cursor/sdk` 及其 Linux 平台二进制需在 **`~/.n8n/nodes`** 目录单独安装，与社区节点包同级解析：
 
-1. 在 n8n 宿主机安装编译工具（Debian/Ubuntu 示例）：
+```json
+{
+  "dependencies": {
+    "n8n-nodes-cursor-agent": "2.2.0",
+    "@cursor/sdk": "1.0.13"
+  },
+  "optionalDependencies": {
+    "@cursor/sdk-linux-x64": "1.0.13",
+    "@cursor/sdk-linux-arm64": "1.0.13"
+  }
+}
+```
 
-   ```bash
-   sudo apt-get update
-   sudo apt-get install -y python3 make g++
-   ```
+在 `~/.n8n/nodes` 执行 `npm install` 后重启 n8n。版本号须与 `@cursor/sdk` 一致。
 
-2. 进入社区节点安装目录并重建 sqlite3（路径以你的环境为准）：
+- **测试环境**（Gateway）：Redis 见运维手册（本机 16379 等），n8n 凭据里填实际 host/port
+- **生产环境**（LLM-H200）：n8n 使用 PostgreSQL；会话 Redis 使用阿里云 RDS（凭据在 n8n UI 配置，与 Matrees 后端 Redis 可共用或独立实例）
 
-   ```bash
-   cd ~/.n8n/nodes/node_modules/n8n-nodes-cursor-agent
-   npm rebuild sqlite3 --build-from-source
-   ```
-
-3. 重启 n8n，或在 UI 中卸载后重新安装 `n8n-nodes-cursor-agent`（2.1.1+ 会在 `postinstall` 中尝试自动 rebuild）。
+节点内 Redis 访问使用 Node.js 内置 `node:net`（RESP 协议），**不**再依赖 `redis` npm 包。
 
 ---
 

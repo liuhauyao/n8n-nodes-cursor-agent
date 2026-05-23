@@ -1,5 +1,5 @@
 /**
- * 校验根目录 package.json；本包含 @cursor/sdk / redis 运行时依赖。
+ * 校验根目录 package.json 符合 n8n 社区节点规范（无 runtime dependencies、无 lifecycle scripts）。
  */
 import { ESLint } from 'eslint';
 import { defineConfig } from 'eslint/config';
@@ -14,12 +14,7 @@ const eslint = new ESLint({
 	cwd: root,
 	allowInlineConfig: false,
 	overrideConfigFile: true,
-	overrideConfig: defineConfig(rec, {
-		rules: {
-			'@n8n/community-nodes/no-runtime-dependencies': 'off',
-			'@n8n/community-nodes/no-forbidden-lifecycle-scripts': 'off',
-		},
-	}),
+	overrideConfig: defineConfig(rec),
 });
 
 const results = await eslint.lintFiles([join(root, 'package.json')]);
