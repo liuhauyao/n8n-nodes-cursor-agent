@@ -6,7 +6,7 @@ import {
 	mergeMarkdownFromTimeline,
 	mergeThinkingFromTimeline,
 } from './assistantTimeline';
-import { embedCursorMessageMeta } from './cursorMessageMeta';
+import { embedCursorMessageMeta, type AgentMetaPendingQuestion } from './cursorMessageMeta';
 import {
 	encodeCursorStreamPayload,
 	extractToolIdentity,
@@ -18,8 +18,10 @@ import {
 	sanitizeThinkingChunk,
 	shouldShowToolInUi,
 	shouldSuppressAssistantText,
+	type CursorAskQuestionItem,
 	type CursorStreamPayload,
 } from './cursorStreamProtocol';
+import { toAgentPendingQuestion } from './hitlTypes';
 
 /** 透传 Cursor SDK 原始事件（仅调试/兼容） */
 export const CURSOR_SDK_MARKER = '__cursor_sdk__';
@@ -52,6 +54,11 @@ export class CursorStreamAssembler {
 	private thinkingStarted = false;
 	private thinkingDurationMs?: number;
 	private fallbackMarkdown = '';
+	private lastRequestId = '';
+	private lastAskCallId = '';
+	private lastAskTitle?: string;
+	private lastAskQuestions: CursorAskQuestionItem[] = [];
+	private awaitingInput = false;
 
 	constructor(private readonly sink: StreamSink) {}
 
@@ -75,7 +82,7 @@ export class CursorStreamAssembler {
 		return markdown || this.fallbackMarkdown;
 	}
 
-	getOutput(): string {
+	getOutput(options?: { pendingQuestion?: AgentMetaPendingQuestion | null }): string {
 		this.builder.finalize();
 		const timeline = this.builder.blocks;
 		let markdown = mergeMarkdownFromTimeline(timeline);
@@ -84,12 +91,58 @@ export class CursorStreamAssembler {
 		}
 		const thinking = mergeThinkingFromTimeline(timeline);
 		const hasTimelineThinking = timeline.some((b) => b.type === 'thinking');
+		const pendingQuestion =
+			options?.pendingQuestion !== undefined
+				? options.pendingQuestion
+				: this.awaitingInput && this.lastAskCallId && this.lastRequestId
+					? toAgentPendingQuestion(
+							this.lastAskCallId,
+							this.lastRequestId,
+							this.lastAskTitle,
+							this.lastAskQuestions,
+						)
+					: undefined;
 		return embedCursorMessageMeta(markdown, {
 			timeline,
 			toolCalls: flattenToolCallsFromTimeline(timeline),
 			thinkingDurationMs: this.thinkingDurationMs,
 			thinking: hasTimelineThinking ? undefined : thinking || undefined,
 			suggestions: this.builder.suggestions,
+			pendingQuestion: pendingQuestion ?? null,
+		});
+	}
+
+	isAwaitingInput(): boolean {
+		return this.awaitingInput;
+	}
+
+	getPendingQuestionMeta(): AgentMetaPendingQuestion | undefined {
+		if (!this.lastAskCallId || !this.lastRequestId || this.lastAskQuestions.length === 0) {
+			return undefined;
+		}
+		return toAgentPendingQuestion(
+			this.lastAskCallId,
+			this.lastRequestId,
+			this.lastAskTitle,
+			this.lastAskQuestions,
+		);
+	}
+
+	async emitHitlCheckpoint(params: {
+		executionId: string;
+		resumeUrl: string;
+		segmentIndex: number;
+	}): Promise<void> {
+		const pendingQuestion = this.getPendingQuestionMeta();
+		if (!pendingQuestion) return;
+		await this.emit({
+			kind: 'hitl_checkpoint',
+			executionId: params.executionId,
+			resumeUrl: params.resumeUrl,
+			pendingQuestion,
+			segmentIndex: params.segmentIndex,
+			requestId: pendingQuestion.requestId,
+			callId: pendingQuestion.callId,
 		});
 	}
 
@@ -141,6 +194,8 @@ export class CursorStreamAssembler {
 			case 'request': {
 				const requestId = typeof data.request_id === 'string' ? data.request_id : '';
 				if (requestId) {
+					this.lastRequestId = requestId;
+					this.awaitingInput = true;
 					await this.emit({ kind: 'awaiting_input', requestId });
 				}
 				break;
@@ -183,6 +238,9 @@ export class CursorStreamAssembler {
 			const parsed = parseAskQuestionArgs(args);
 			if (parsed && !this.emittedAskQuestions.has(callId)) {
 				this.emittedAskQuestions.add(callId);
+				this.lastAskCallId = callId;
+				this.lastAskTitle = parsed.title;
+				this.lastAskQuestions = parsed.questions;
 				await this.emit({
 					kind: 'ask_question',
 					callId,

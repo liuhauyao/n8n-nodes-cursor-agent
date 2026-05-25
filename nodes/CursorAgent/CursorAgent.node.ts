@@ -17,7 +17,20 @@ import { loadCursorSdk } from './lib/loadCursorSdk';
 import { resolveCursorApiKey } from './lib/resolveApiKey';
 import { resolveLocalCwd } from './lib/resolveLocalCwd';
 import { CursorStreamAssembler } from './lib/streamAdapter';
+import { formatAskQuestionReply } from './lib/formatAskQuestionReply';
+import {
+	clearHitlPending,
+	getHitlPending,
+	setHitlPending,
+} from './lib/hitlSessionStore';
+import {
+	parseAgentReply,
+	type AgentRunMode,
+	type AgentStatus,
+} from './lib/hitlTypes';
+import { applyHitlSystemMessage, readHitlEnabled } from './lib/hitlConfig';
 import { getStoredAgentId, setStoredAgentId, type RedisCredentials } from './lib/sessionStore';
+import type { Run } from '@cursor/sdk';
 
 const DEFAULT_MODEL = 'composer-2.5';
 const STATIC_MODEL_IDS = ['composer-2.5', 'composer-2', 'composer-1'] as const;
@@ -66,6 +79,34 @@ function readRedisCredentials(raw: IDataObject): RedisCredentials {
 	};
 }
 
+function readRunMode(raw: string): AgentRunMode {
+	return raw === 'continue_hitl' ? 'continue_hitl' : 'new_turn';
+}
+
+async function consumeRunStream(
+	assembler: CursorStreamAssembler,
+	run: Run,
+): Promise<boolean> {
+	if (!run.supports('stream')) return false;
+	for await (const event of run.stream()) {
+		if (
+			event.type === 'request'
+			|| event.type === 'status'
+			|| event.type === 'task'
+		) {
+			await assembler.consumeMessage(event);
+			if (
+				event.type === 'request'
+				&& assembler.isAwaitingInput()
+				&& assembler.getPendingQuestionMeta()
+			) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 function readSettingSources(raw: string | string[] | undefined): SettingSource[] {
 	if (!raw) return ['project'];
 	const values = Array.isArray(raw) ? raw : [raw];
@@ -78,7 +119,7 @@ export class CursorAgent implements INodeType {
 		name: 'cursorAgent',
 		icon: 'file:cursor.svg',
 		group: ['transform'],
-		version: 1,
+		version: 2,
 		subtitle: '={{$parameter["model"]}}',
 		description: 'Run Cursor Agent via the Cursor SDK (local runtime) with configurable MCP servers and skills',
 		defaults: {
@@ -118,6 +159,58 @@ export class CursorAgent implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional conversation key stored in Redis to resume the same Cursor agent across runs',
+			},
+			{
+				displayName: 'Run Mode',
+				name: 'runMode',
+				type: 'options',
+				options: [
+					{ name: 'New Turn', value: 'new_turn' },
+					{ name: 'Continue HITL', value: 'continue_hitl' },
+				],
+				default: 'new_turn',
+				description: 'new_turn: user message; continue_hitl: submit AskQuestion answer after Wait resume',
+			},
+			{
+				displayName: 'Agent Reply (JSON)',
+				name: 'agentReply',
+				type: 'json',
+				default: {},
+				displayOptions: {
+					show: {
+						runMode: ['continue_hitl'],
+					},
+				},
+				description: 'Structured AskQuestion answer from HITL resume webhook',
+			},
+			{
+				displayName: 'Resume URL',
+				name: 'resumeUrl',
+				type: 'string',
+				default: '={{ $execution.resumeUrl }}',
+				description: 'n8n Wait resume URL injected into hitl_checkpoint stream event',
+			},
+			{
+				displayName: 'Execution ID',
+				name: 'executionId',
+				type: 'string',
+				default: '={{ $execution.id }}',
+				description: 'Current n8n execution id for HITL checkpoint',
+			},
+			{
+				displayName: 'HITL Segment Index',
+				name: 'segmentIndex',
+				type: 'number',
+				default: 0,
+				description: 'Zero-based HITL loop counter within a single user turn',
+			},
+			{
+				displayName: 'HITL Enabled',
+				name: 'hitlEnabled',
+				type: 'boolean',
+				default: true,
+				description:
+					'When enabled, AskQuestion pauses the run for human input (n8n Wait + resumeUrl). When disabled, Agent never enters awaiting_input.',
 			},
 			{
 				displayName: 'Skills Root Directory',
@@ -375,7 +468,7 @@ export class CursorAgent implements INodeType {
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
-				const systemMessage = this.getNodeParameter('systemMessage', itemIndex, '') as string;
+				const systemMessageRaw = this.getNodeParameter('systemMessage', itemIndex, '') as string;
 				const chatInput = this.getNodeParameter('chatInput', itemIndex, '') as string;
 				const sessionId = this.getNodeParameter('sessionId', itemIndex, '') as string;
 				const skillsRoot = this.getNodeParameter('skillsRoot', itemIndex, '') as string;
@@ -390,7 +483,34 @@ export class CursorAgent implements INodeType {
 				const mcpServersJson = String(additionalOptions.mcpServersJson ?? '');
 				const sessionTtlSeconds = Number(additionalOptions.sessionTtlSeconds ?? 604800);
 
-				if (!chatInput?.trim()) {
+				const runMode = readRunMode(this.getNodeParameter('runMode', itemIndex, 'new_turn') as string);
+				const agentReplyRaw = this.getNodeParameter('agentReply', itemIndex, {}) as unknown;
+				const resumeUrl = String(this.getNodeParameter('resumeUrl', itemIndex, '') ?? '').trim();
+				const executionId = String(this.getNodeParameter('executionId', itemIndex, '') ?? '').trim();
+				const segmentIndex = Number(this.getNodeParameter('segmentIndex', itemIndex, 0) ?? 0);
+				const hitlEnabled = readHitlEnabled(
+					this.getNodeParameter('hitlEnabled', itemIndex, true) as boolean | string,
+				);
+				const systemMessage = applyHitlSystemMessage(systemMessageRaw, hitlEnabled);
+
+				const agentReply = runMode === 'continue_hitl' ? parseAgentReply(agentReplyRaw) : null;
+				if (runMode === 'continue_hitl') {
+					if (!hitlEnabled) {
+						throw new NodeOperationError(this.getNode(), 'HITL is disabled on this node (hitlEnabled=false)', {
+							itemIndex,
+						});
+					}
+					if (!agentReply) {
+						throw new NodeOperationError(this.getNode(), 'agentReply is required for continue_hitl', {
+							itemIndex,
+						});
+					}
+					if (!sessionId) {
+						throw new NodeOperationError(this.getNode(), 'sessionId is required for continue_hitl', {
+							itemIndex,
+						});
+					}
+				} else if (!chatInput?.trim()) {
 					throw new NodeOperationError(this.getNode(), 'User message (chatInput) is empty', { itemIndex });
 				}
 				let cwd: string | string[];
@@ -428,17 +548,44 @@ export class CursorAgent implements INodeType {
 					? await getStoredAgentId(redisCredentials, sessionId)
 					: undefined;
 
+				if (runMode === 'continue_hitl') {
+					const pending = await getHitlPending(redisCredentials, sessionId);
+					if (!pending) {
+						throw new NodeOperationError(this.getNode(), 'No pending HITL state for session', {
+							itemIndex,
+						});
+					}
+					if (
+						pending.requestId !== agentReply!.requestId
+						|| pending.callId !== agentReply!.callId
+					) {
+						throw new NodeOperationError(this.getNode(), 'agentReply does not match pending HITL state', {
+							itemIndex,
+						});
+					}
+				}
+
 				let agent: SDKAgent;
-				if (storedAgentId) {
-					agent = await Agent.resume(storedAgentId, agentOptions);
+				const resumeAgentId = runMode === 'continue_hitl'
+					? (await getHitlPending(redisCredentials, sessionId))?.agentId
+					: storedAgentId;
+				if (resumeAgentId) {
+					agent = await Agent.resume(resumeAgentId, agentOptions);
 				} else {
 					agent = await Agent.create(agentOptions);
 				}
 
 				try {
-					const userPrompt = storedAgentId
-						? chatInput.trim()
-						: [systemMessage?.trim(), chatInput.trim()].filter(Boolean).join('\n\n---\n\n');
+					let userPrompt: string;
+					if (runMode === 'continue_hitl') {
+						const pending = await getHitlPending(redisCredentials, sessionId);
+						userPrompt = formatAskQuestionReply(agentReply!, pending?.pendingQuestion);
+						await clearHitlPending(redisCredentials, sessionId);
+					} else {
+						userPrompt = storedAgentId
+							? chatInput.trim()
+							: [systemMessage?.trim(), chatInput.trim()].filter(Boolean).join('\n\n---\n\n');
+					}
 
 					const assembler = new CursorStreamAssembler({
 						onBegin: async () => {
@@ -471,48 +618,80 @@ export class CursorAgent implements INodeType {
 					};
 
 					const run = await agent.send(userPrompt, sendOptions);
+					const hitlPaused = await consumeRunStream(assembler, run);
 
-					if (run.supports('stream')) {
-						for await (const event of run.stream()) {
-							if (
-								event.type === 'request'
-								|| event.type === 'status'
-								|| event.type === 'task'
-							) {
-								await assembler.consumeMessage(event);
-							}
+					let agentStatus: AgentStatus = 'finished';
+					let pendingQuestion = undefined as ReturnType<CursorStreamAssembler['getPendingQuestionMeta']>;
+
+					if (hitlPaused && hitlEnabled) {
+						agentStatus = 'awaiting_input';
+						pendingQuestion = assembler.getPendingQuestionMeta();
+						if (sessionId && pendingQuestion && executionId) {
+							await setHitlPending(redisCredentials, sessionId, {
+								provider: 'cursor',
+								agentId: agent.agentId,
+								runId: run.id,
+								requestId: pendingQuestion.requestId,
+								callId: pendingQuestion.callId,
+								pendingQuestion,
+								executionId,
+								segmentIndex,
+								createdAt: Date.now(),
+							});
 						}
-					}
+						if (resumeUrl && executionId && pendingQuestion) {
+							await assembler.emitHitlCheckpoint({
+								executionId,
+								resumeUrl,
+								segmentIndex,
+							});
+						}
+						if (run.supports('cancel')) {
+							await run.cancel().catch(() => undefined);
+						}
+						await assembler.end();
+					} else {
+						const result = run.supports('wait') ? await run.wait() : { status: 'error' as const };
+						assembler.setFinalResult(result.status === 'finished' ? result.result : undefined);
+						await assembler.end();
 
-					const result = run.supports('wait') ? await run.wait() : { status: 'error' as const };
-					assembler.setFinalResult(result.status === 'finished' ? result.result : undefined);
-					await assembler.end();
-
-					if (result.status === 'error') {
-						const detail = ('result' in result ? result.result?.trim() : undefined)
-							|| assembler.getTextOutput()?.trim()
-							|| 'no error detail from SDK (check n8n logs for ConnectError / proxy issues)';
-						throw new NodeOperationError(
-							this.getNode(),
-							`Cursor agent run failed: ${detail}`,
-							{ itemIndex },
-						);
+						if (result.status === 'error') {
+							agentStatus = 'error';
+							const detail = ('result' in result ? result.result?.trim() : undefined)
+								|| assembler.getTextOutput()?.trim()
+								|| 'no error detail from SDK (check n8n logs for ConnectError / proxy issues)';
+							throw new NodeOperationError(
+								this.getNode(),
+								`Cursor agent run failed: ${detail}`,
+								{ itemIndex },
+							);
+						}
 					}
 
 					if (sessionId && agent.agentId) {
 						await setStoredAgentId(redisCredentials, sessionId, agent.agentId, sessionTtlSeconds);
 					}
 
-					const output = assembler.getOutput() || assembler.getTextOutput() || result.result || '';
+					const output =
+						assembler.getOutput({
+							pendingQuestion: agentStatus === 'awaiting_input' ? pendingQuestion ?? null : null,
+						})
+						|| assembler.getTextOutput()
+						|| '';
 
 					returnData.push({
 						json: {
 							output,
-							textOutput: assembler.getTextOutput() || result.result || '',
+							textOutput: assembler.getTextOutput() || '',
 							model,
 							agentId: agent.agentId,
 							runId: run.id,
 							sessionId,
+							agentStatus,
+							pendingQuestion: agentStatus === 'awaiting_input' ? pendingQuestion : undefined,
+							segmentIndex,
+							resumeUrl: agentStatus === 'awaiting_input' ? resumeUrl : undefined,
+							executionId: agentStatus === 'awaiting_input' ? executionId : undefined,
 						},
 						pairedItem: { item: itemIndex },
 					});

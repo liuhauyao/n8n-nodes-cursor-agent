@@ -31,6 +31,20 @@ export type CursorStreamPayload =
 	| {
 			kind: 'todo_update';
 			items: Array<{ id: string; content: string; status: string }>;
+	  }
+	| {
+			kind: 'hitl_checkpoint';
+			executionId: string;
+			resumeUrl: string;
+			pendingQuestion: {
+				callId: string;
+				title?: string;
+				requestId: string;
+				questions: CursorAskQuestionItem[];
+			};
+			segmentIndex: number;
+			requestId: string;
+			callId: string;
 	  };
 
 export function encodeCursorStreamPayload(payload: CursorStreamPayload): string {
@@ -84,15 +98,21 @@ export function stripNextTags(text: string): string {
 	return result.replace(NEXT_TAG_RE, '').trim();
 }
 
-/** 从正文提取 `<next>` 建议项 */
+/** 从正文提取 `<next>` 建议项（单块多行与多块均支持） */
 export function extractNextSuggestions(text: string): string[] {
 	if (!text) return [];
 	const suggestions: string[] = [];
 	const re = /<next>([\s\S]*?)<\/next>/gi;
 	let match: RegExpExecArray | null;
 	while ((match = re.exec(text)) !== null) {
-		const item = match[1].trim();
-		if (item) suggestions.push(item);
+		const block = match[1].trim();
+		if (!block) continue;
+		const lines = block
+			.split(/\r?\n/)
+			.map((line) => line.replace(/^[\s\-•*]+/, '').trim())
+			.filter(Boolean);
+		if (lines.length > 0) suggestions.push(...lines);
+		else suggestions.push(block);
 	}
 	return suggestions;
 }

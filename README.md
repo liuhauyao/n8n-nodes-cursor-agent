@@ -145,6 +145,17 @@ Inline MCP 在 **create、resume、send** 时均需传入；本节点已自动�
 | `todo_update` | Todo 列表更新 |
 | `status` | 任务状态 |
 | `awaiting_input` | 等待用户输入 |
+| `hitl_checkpoint` | HITL 暂停点（含 resumeUrl） |
+
+### 输出字段（v2+）
+
+| 字段 | 说明 |
+|------|------|
+| `agentStatus` | `finished` / `awaiting_input` / `error` |
+| `pendingQuestion` | AskQuestion 结构化问卷 |
+| `segmentIndex` | HITL 段序号 |
+| `resumeUrl` | n8n Wait 续跑 URL（awaiting 时） |
+| `hitlEnabled` | 节点参数：是否启用 AskQuestion 暂停（默认 true） |
 
 ---
 
