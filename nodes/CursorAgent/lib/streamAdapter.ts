@@ -3,7 +3,7 @@ import type { InteractionUpdate } from '@cursor/sdk';
 import {
 	AssistantTimelineBuilder,
 	flattenToolCallsFromTimeline,
-	mergeMarkdownFromTimeline,
+	lastMarkdownFromTimeline,
 	mergeThinkingFromTimeline,
 } from './assistantTimeline';
 import { embedCursorMessageMeta } from './cursorMessageMeta';
@@ -66,14 +66,14 @@ export class CursorStreamAssembler {
 
 	getTextOutput(): string {
 		this.builder.finalize();
-		const markdown = mergeMarkdownFromTimeline(this.builder.blocks);
+		const markdown = lastMarkdownFromTimeline(this.builder.blocks);
 		return markdown || this.fallbackMarkdown;
 	}
 
 	getOutput(): string {
 		this.builder.finalize();
 		const timeline = this.builder.blocks;
-		let markdown = mergeMarkdownFromTimeline(timeline);
+		let markdown = lastMarkdownFromTimeline(timeline);
 		if (!markdown && this.fallbackMarkdown) {
 			markdown = this.fallbackMarkdown;
 		}

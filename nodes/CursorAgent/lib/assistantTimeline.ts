@@ -198,6 +198,14 @@ export function mergeThinkingFromTimeline(blocks: AssistantTimelineBlock[]): str
 		.join('\n\n');
 }
 
+/** 用户可见正文：仅最后一轮 markdown（跳过过程过渡句） */
+export function lastMarkdownFromTimeline(blocks: AssistantTimelineBlock[]): string {
+	const mdBlocks = blocks.filter((b): b is AssistantMarkdownBlock => b.type === 'markdown' && !!b.content?.trim());
+	if (!mdBlocks.length) return '';
+	return mdBlocks[mdBlocks.length - 1].content.trim();
+}
+
+/** @deprecated 仅内部调试；落库/展示请用 lastMarkdownFromTimeline */
 export function mergeMarkdownFromTimeline(blocks: AssistantTimelineBlock[]): string {
 	return blocks
 		.filter((b): b is AssistantMarkdownBlock => b.type === 'markdown')
