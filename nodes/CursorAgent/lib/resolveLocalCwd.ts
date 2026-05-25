@@ -6,7 +6,7 @@ export function resolveLocalCwd(params: {
 	skillsRoot?: string;
 	workingDirectories?: string | string[];
 	legacyWorkingDirectory?: string;
-}): string | string[] {
+}): string | string[] | undefined {
 	const ordered: string[] = [];
 
 	const skillsRoot = params.skillsRoot?.trim();
@@ -29,7 +29,7 @@ export function resolveLocalCwd(params: {
 
 	const unique = [...new Set(ordered)];
 	if (unique.length === 0) {
-		throw new Error('At least one working directory is required');
+		return undefined;
 	}
 	if (unique.length === 1) return unique[0];
 	return unique;

@@ -1,4 +1,4 @@
-import type { InteractionUpdate, SDKMessage } from '@cursor/sdk';
+import type { InteractionUpdate } from '@cursor/sdk';
 
 import {
 	AssistantTimelineBuilder,
@@ -6,22 +6,16 @@ import {
 	mergeMarkdownFromTimeline,
 	mergeThinkingFromTimeline,
 } from './assistantTimeline';
-import { embedCursorMessageMeta, type AgentMetaPendingQuestion } from './cursorMessageMeta';
+import { embedCursorMessageMeta } from './cursorMessageMeta';
 import {
 	encodeCursorStreamPayload,
 	extractToolIdentity,
-	isAskQuestionToolName,
-	isUpdateTodosToolName,
-	parseAskQuestionArgs,
-	parseUpdateTodosArgs,
 	resolveToolLabel,
 	sanitizeThinkingChunk,
 	shouldShowToolInUi,
 	shouldSuppressAssistantText,
-	type CursorAskQuestionItem,
 	type CursorStreamPayload,
 } from './cursorStreamProtocol';
-import { toAgentPendingQuestion } from './hitlTypes';
 
 /** 透传 Cursor SDK 原始事件（仅调试/兼容） */
 export const CURSOR_SDK_MARKER = '__cursor_sdk__';
@@ -49,16 +43,10 @@ export interface StreamSink {
  */
 export class CursorStreamAssembler {
 	private readonly builder = new AssistantTimelineBuilder();
-	private readonly emittedAskQuestions = new Set<string>();
 	private readonly startedTools = new Set<string>();
 	private thinkingStarted = false;
 	private thinkingDurationMs?: number;
 	private fallbackMarkdown = '';
-	private lastRequestId = '';
-	private lastAskCallId = '';
-	private lastAskTitle?: string;
-	private lastAskQuestions: CursorAskQuestionItem[] = [];
-	private awaitingInput = false;
 
 	constructor(private readonly sink: StreamSink) {}
 
@@ -82,7 +70,7 @@ export class CursorStreamAssembler {
 		return markdown || this.fallbackMarkdown;
 	}
 
-	getOutput(options?: { pendingQuestion?: AgentMetaPendingQuestion | null }): string {
+	getOutput(): string {
 		this.builder.finalize();
 		const timeline = this.builder.blocks;
 		let markdown = mergeMarkdownFromTimeline(timeline);
@@ -91,58 +79,12 @@ export class CursorStreamAssembler {
 		}
 		const thinking = mergeThinkingFromTimeline(timeline);
 		const hasTimelineThinking = timeline.some((b) => b.type === 'thinking');
-		const pendingQuestion =
-			options?.pendingQuestion !== undefined
-				? options.pendingQuestion
-				: this.awaitingInput && this.lastAskCallId && this.lastRequestId
-					? toAgentPendingQuestion(
-							this.lastAskCallId,
-							this.lastRequestId,
-							this.lastAskTitle,
-							this.lastAskQuestions,
-						)
-					: undefined;
 		return embedCursorMessageMeta(markdown, {
 			timeline,
 			toolCalls: flattenToolCallsFromTimeline(timeline),
 			thinkingDurationMs: this.thinkingDurationMs,
 			thinking: hasTimelineThinking ? undefined : thinking || undefined,
 			suggestions: this.builder.suggestions,
-			pendingQuestion: pendingQuestion ?? null,
-		});
-	}
-
-	isAwaitingInput(): boolean {
-		return this.awaitingInput;
-	}
-
-	getPendingQuestionMeta(): AgentMetaPendingQuestion | undefined {
-		if (!this.lastAskCallId || !this.lastRequestId || this.lastAskQuestions.length === 0) {
-			return undefined;
-		}
-		return toAgentPendingQuestion(
-			this.lastAskCallId,
-			this.lastRequestId,
-			this.lastAskTitle,
-			this.lastAskQuestions,
-		);
-	}
-
-	async emitHitlCheckpoint(params: {
-		executionId: string;
-		resumeUrl: string;
-		segmentIndex: number;
-	}): Promise<void> {
-		const pendingQuestion = this.getPendingQuestionMeta();
-		if (!pendingQuestion) return;
-		await this.emit({
-			kind: 'hitl_checkpoint',
-			executionId: params.executionId,
-			resumeUrl: params.resumeUrl,
-			pendingQuestion,
-			segmentIndex: params.segmentIndex,
-			requestId: pendingQuestion.requestId,
-			callId: pendingQuestion.callId,
 		});
 	}
 
@@ -188,43 +130,6 @@ export class CursorStreamAssembler {
 		}
 	}
 
-	async consumeMessage(event: SDKMessage): Promise<void> {
-		const data = event as unknown as Record<string, unknown>;
-		switch (data.type) {
-			case 'request': {
-				const requestId = typeof data.request_id === 'string' ? data.request_id : '';
-				if (requestId) {
-					this.lastRequestId = requestId;
-					this.awaitingInput = true;
-					await this.emit({ kind: 'awaiting_input', requestId });
-				}
-				break;
-			}
-			case 'task': {
-				const phase = typeof data.status === 'string' ? data.status : 'task';
-				const message = typeof data.text === 'string' ? data.text : undefined;
-				await this.emit({ kind: 'status', phase, message });
-				break;
-			}
-			case 'tool_call': {
-				const callId = String(data.call_id ?? '');
-				const status = data.status;
-				const { name, args } = extractToolIdentity({
-					name: data.name,
-					args: data.args,
-				});
-				if (status === 'running') {
-					await this.handleToolStarted(callId, { name, args });
-				} else if (status === 'completed' || status === 'error') {
-					await this.handleToolCompleted(callId, { name, args });
-				}
-				break;
-			}
-			default:
-				break;
-		}
-	}
-
 	private async emit(payload: CursorStreamPayload): Promise<void> {
 		const json = encodeCursorStreamPayload(payload);
 		await this.sink.onStructured(json);
@@ -232,34 +137,7 @@ export class CursorStreamAssembler {
 
 	private async handleToolStarted(callId: string, toolCall: unknown): Promise<void> {
 		if (!callId) return;
-		const { name, args } = extractToolIdentity(toolCall);
-
-		if (isAskQuestionToolName(name)) {
-			const parsed = parseAskQuestionArgs(args);
-			if (parsed && !this.emittedAskQuestions.has(callId)) {
-				this.emittedAskQuestions.add(callId);
-				this.lastAskCallId = callId;
-				this.lastAskTitle = parsed.title;
-				this.lastAskQuestions = parsed.questions;
-				await this.emit({
-					kind: 'ask_question',
-					callId,
-					title: parsed.title,
-					questions: parsed.questions,
-				});
-			}
-			return;
-		}
-
-		if (isUpdateTodosToolName(name)) {
-			const items = parseUpdateTodosArgs(args);
-			if (items?.length) {
-				this.builder.onTodoUpdate(items);
-				await this.emit({ kind: 'todo_update', items });
-			}
-			return;
-		}
-
+		const { name } = extractToolIdentity(toolCall);
 		if (!shouldShowToolInUi(name)) return;
 		if (this.startedTools.has(callId)) return;
 		this.startedTools.add(callId);
@@ -282,7 +160,6 @@ export class CursorStreamAssembler {
 	private async handleToolCompleted(callId: string, toolCall: unknown): Promise<void> {
 		if (!callId) return;
 		const { name } = extractToolIdentity(toolCall);
-		if (isAskQuestionToolName(name) || isUpdateTodosToolName(name)) return;
 		if (!shouldShowToolInUi(name)) return;
 		if (!this.startedTools.has(callId)) return;
 
@@ -340,15 +217,6 @@ export class CursorStreamPassthrough {
 		if (update.type === 'text-delta' && update.text) {
 			this.assistantText += update.text;
 		}
-	}
-
-	async consumeMessage(event: SDKMessage): Promise<void> {
-		const jsonContent = encodeCursorSdkChunk({
-			channel: 'message',
-			data: event as unknown as Record<string, unknown>,
-		});
-		this.recordStructured(jsonContent);
-		await this.sink.onStructured(jsonContent);
 	}
 }
 

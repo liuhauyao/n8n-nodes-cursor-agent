@@ -1,9 +1,20 @@
 import { redisGet, redisSetEx, type RedisCredentials } from './redisClient';
+import type { IDataObject } from 'n8n-workflow';
 
 const SESSION_KEY_PREFIX = 'cursor-agent:session:';
 const DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 export type { RedisCredentials };
+
+export function readRedisCredentials(raw: IDataObject): RedisCredentials {
+	return {
+		host: String(raw.host ?? 'localhost'),
+		port: Number(raw.port ?? 6379),
+		user: raw.user ? String(raw.user) : undefined,
+		password: raw.password ? String(raw.password) : undefined,
+		database: raw.database !== undefined ? Number(raw.database) : 0,
+	};
+}
 
 export async function getStoredAgentId(
 	credentials: RedisCredentials,

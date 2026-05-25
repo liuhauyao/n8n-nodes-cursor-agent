@@ -141,21 +141,20 @@ Inline MCP 在 **create、resume、send** 时均需传入；本节点已自动�
 | `thinking_start` / `thinking_chunk` / `thinking_end` | 思考过程 |
 | `text` | 正文增量 |
 | `tool_start` / `tool_end` | 工具调用 |
-| `ask_question` | AskQuestion 工具参数 |
-| `todo_update` | Todo 列表更新 |
 | `status` | 任务状态 |
-| `awaiting_input` | 等待用户输入 |
-| `hitl_checkpoint` | HITL 暂停点（含 resumeUrl） |
 
-### 输出字段（v2+）
+### 输出字段
 
 | 字段 | 说明 |
 |------|------|
-| `agentStatus` | `finished` / `awaiting_input` / `error` |
-| `pendingQuestion` | AskQuestion 结构化问卷 |
-| `segmentIndex` | HITL 段序号 |
-| `resumeUrl` | n8n Wait 续跑 URL（awaiting 时） |
-| `hitlEnabled` | 节点参数：是否启用 AskQuestion 暂停（默认 true） |
+| `output` | 带 timeline 元数据的完整输出 |
+| `textOutput` | 纯 Markdown 正文 |
+| `model` | 使用的模型 id |
+| `agentId` | Cursor agent id |
+| `runId` | 本次 run id |
+| `sessionId` | 回传输入的 session id |
+
+> headless 模式下 Cursor SDK 不提供 AskQuestion / Todo 交互；节点会过滤相关回退文案，且不在工具链 UI 展示这些内部工具。
 
 ---
 

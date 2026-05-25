@@ -9,31 +9,11 @@ export interface CursorToolCallMeta {
 
 export type { AssistantTimelineBlock };
 
-export interface AgentMetaTodoItem {
-	id: string;
-	content: string;
-	status: string;
-}
-
-export interface AgentMetaPendingQuestion {
-	callId: string;
-	title?: string;
-	requestId: string;
-	questions: Array<{
-		id: string;
-		prompt: string;
-		options: Array<{ id: string; label: string }>;
-		allowMultiple?: boolean;
-	}>;
-}
-
 export interface CursorMessageMeta {
 	toolCalls?: CursorToolCallMeta[];
 	thinkingDurationMs?: number;
 	thinking?: string;
 	suggestions?: string[];
-	todos?: AgentMetaTodoItem[];
-	pendingQuestion?: AgentMetaPendingQuestion | null;
 	timeline?: AssistantTimelineBlock[];
 }
 
@@ -73,32 +53,14 @@ export function extractThinkingFromOutput(output: string): string {
 	return parts.join('\n\n');
 }
 
-function collectTodosFromTimeline(timeline?: AssistantTimelineBlock[]): AgentMetaTodoItem[] | undefined {
-	if (!timeline?.length) return undefined;
-	const items: AgentMetaTodoItem[] = [];
-	for (const block of timeline) {
-		if (block.type === 'todos' && 'items' in block && Array.isArray(block.items)) {
-			for (const item of block.items) {
-				if (item?.id && item.content) {
-					items.push({ id: item.id, content: item.content, status: item.status ?? 'pending' });
-				}
-			}
-		}
-	}
-	return items.length > 0 ? items : undefined;
-}
-
 export function embedCursorMessageMeta(content: string, meta: CursorMessageMeta): string {
 	const clean = stripCursorMessageMeta(content);
-	const todos = meta.todos ?? collectTodosFromTimeline(meta.timeline);
 	const hasTools = !!meta.toolCalls?.length;
 	const hasDuration = meta.thinkingDurationMs !== undefined;
 	const hasThinking = !!meta.thinking?.trim();
 	const hasTimeline = !!meta.timeline?.length;
 	const hasSuggestions = !!meta.suggestions?.length;
-	const hasTodos = !!todos?.length;
-	const hasPending = meta.pendingQuestion !== undefined && meta.pendingQuestion !== null;
-	if (!hasTools && !hasDuration && !hasThinking && !hasTimeline && !hasSuggestions && !hasTodos && !hasPending) {
+	if (!hasTools && !hasDuration && !hasThinking && !hasTimeline && !hasSuggestions) {
 		return clean;
 	}
 
@@ -114,12 +76,6 @@ export function embedCursorMessageMeta(content: string, meta: CursorMessageMeta)
 	}
 	if (hasSuggestions) {
 		payload.suggestions = meta.suggestions;
-	}
-	if (hasTodos) {
-		payload.todos = todos;
-	}
-	if (hasPending) {
-		payload.pendingQuestion = meta.pendingQuestion;
 	}
 	if (hasTimeline) {
 		payload.timeline = meta.timeline;
