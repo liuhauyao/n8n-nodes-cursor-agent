@@ -152,9 +152,9 @@ export function stripPostToolThinkingBlocks(
 	}
 }
 
-/** 不在工具链 UI 展示的内部工具 */
+/** 不在工具链 UI 展示的内部/噪声工具（MCP、Read 等仍展示，含被拒绝的调用） */
 const HIDDEN_TOOL_NAMES = new Set([
-	'ReadLints', 'glob', 'Glob', 'Grep', 'Shell', 'Task',
+	'ReadLints',
 	'AskQuestion', 'askQuestion', 'AskUserQuestion',
 	'updateTodos', 'TodoWrite', 'todoWrite',
 ]);

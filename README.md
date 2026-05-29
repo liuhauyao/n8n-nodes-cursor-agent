@@ -71,6 +71,20 @@ Settings → Community Nodes → Install → 输入 `n8n-nodes-cursor-agent`
 | **Additional Options → MCP Servers** | 表单配置 HTTP / SSE / stdio MCP |
 | **Additional Options → MCP Servers JSON** | JSON 对象，**非空时覆盖表单** |
 | **Additional Options → Session TTL** | Redis 键 TTL（秒），默认 604800 |
+| **Options → Agent Behavior → Permission Preset** | 见下方 preset 矩阵（与 Claude Agent 选项名一致） |
+
+### Permission Preset（与 Claude Agent 对齐）
+
+| Preset | 内置工具 | MCP | Skills | 实现方式 |
+|--------|----------|-----|--------|----------|
+| **`mcp_skills_only`** | 软禁（cli.json） | 是 | 是 | 灵感助手推荐 |
+| **`plan_only`** | 软禁（cli.json） | **否**（节点强制清空） | 是 | 平台客服推荐 |
+| `customer_service` / `read_only` | 无硬限制 | 是 | 是 | 遗留选项，同 `full_agent` |
+| `full_agent` | 全部 | 是 | 是 | 默认；内部开发 |
+
+**Cursor 与 Claude 的差异：** Claude 通过 `disallowedTools` + `dontAsk` **拒绝执行**但保留 tool 流式事件；Cursor 依赖 `.cursor/cli.json` 拒绝执行，SDK 仍会发出 `tool-call-started` 事件供 UI 展示（已取消对 Read/Grep/Shell 等的 UI 隐藏）。
+
+**工作区约定：** `mcp_skills_only` / `plan_only` 时 Skills Root **仅**指向 skills 目录，勿挂载 `matrees-backend` 等源码路径。
 
 ### Skills
 

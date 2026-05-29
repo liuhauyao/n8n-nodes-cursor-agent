@@ -14,7 +14,9 @@ export interface CursorAgentRunParams {
 	skillsRoot: string;
 	workingDirectories: string[];
 	workingDirectory: string;
-	settingSources: SettingSource[];
+		settingSources: SettingSource[];
+	permissionPreset: string;
+	maxTurns: number;
 	mcpServersForm: McpServersFormValue;
 	mcpServersJson: string;
 	hasWorkspaceConfig: boolean;
@@ -45,6 +47,7 @@ export function readCursorAgentRunParams(
 	const options = ctx.getNodeParameter('options', itemIndex, {}) as IDataObject;
 	const session = (options.session ?? {}) as IDataObject;
 	const workspace = (options.workspace ?? {}) as IDataObject;
+	const agentBehavior = (options.agentBehavior ?? {}) as IDataObject;
 	const mcp = (options.mcp ?? {}) as IDataObject;
 
 	const legacyAdditional = ctx.getNodeParameter('additionalOptions', itemIndex, {}) as IDataObject;
@@ -76,6 +79,17 @@ export function readCursorAgentRunParams(
 		?? 604800,
 	);
 
+	const permissionPreset =
+		pickString(agentBehavior.permissionPreset)
+		|| pickString(ctx.getNodeParameter('permissionPreset', itemIndex, 'full_agent'))
+		|| 'full_agent';
+
+	const maxTurnsRaw = Number(
+		agentBehavior.maxTurns
+		?? ctx.getNodeParameter('maxTurns', itemIndex, 0)
+		?? 0,
+	);
+
 	const mcpServersForm = (mcp.mcpServers ?? legacyMcpForm ?? {}) as McpServersFormValue;
 	const mcpServersJson = pickString(mcp.mcpServersJson)
 		|| pickString(legacyAdditional.mcpServersJson);
@@ -97,6 +111,8 @@ export function readCursorAgentRunParams(
 		workingDirectories,
 		workingDirectory: workingDirectory.trim(),
 		settingSources: readSettingSources(settingSourcesRaw as string | string[] | undefined),
+		permissionPreset,
+		maxTurns: maxTurnsRaw,
 		mcpServersForm,
 		mcpServersJson,
 		hasWorkspaceConfig,

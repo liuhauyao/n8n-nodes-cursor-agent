@@ -8,7 +8,7 @@ import {
 	type INodeType,
 	type INodeTypeDescription,
 } from 'n8n-workflow';
-import type { InteractionUpdate, SDKAgent } from '@cursor/sdk';
+import type { InteractionUpdate, LocalAgentOptions, SDKAgent } from '@cursor/sdk';
 
 import { CURSOR_AGENT_OPTIONS_PROPERTY } from './lib/agentOptionsProperties';
 import { parseMcpServers } from './lib/parseMcpServers';
@@ -21,6 +21,11 @@ import {
 	resolveRedisForSession,
 	tryGetRedisCredentials,
 } from './lib/readNodeParameters';
+import {
+	appendPresetSystemMessage,
+	getPresetLocalOptions,
+	resolveCursorPermissionPreset,
+} from './lib/permissionPresets';
 import { CursorStreamAssembler } from './lib/streamAdapter';
 import { getStoredAgentId, setStoredAgentId } from './lib/sessionStore';
 
@@ -158,10 +163,17 @@ export class CursorAgent implements INodeType {
 					throw new NodeOperationError(this.getNode(), message, { itemIndex });
 				}
 
+				const permissionPreset = resolveCursorPermissionPreset(params.permissionPreset);
+				const presetLocal = getPresetLocalOptions(permissionPreset, params.settingSources);
+
+				if (permissionPreset === 'plan_only') {
+					mcpServers = {};
+				}
+
 				const agentOptions: {
 					apiKey: string;
 					model: { id: string };
-					local?: { cwd: string | string[]; settingSources?: typeof params.settingSources };
+					local?: LocalAgentOptions;
 					mcpServers?: ReturnType<typeof parseMcpServers>;
 				} = {
 					apiKey,
@@ -176,7 +188,14 @@ export class CursorAgent implements INodeType {
 					});
 					agentOptions.local = {
 						...(cwd ? { cwd } : { cwd: process.cwd() }),
-						settingSources: params.settingSources,
+						settingSources: presetLocal.settingSources ?? params.settingSources,
+						...(presetLocal.enableSandbox ? { sandboxOptions: { enabled: true } } : {}),
+					};
+				} else if (presetLocal.enableSandbox) {
+					agentOptions.local = {
+						cwd: process.cwd(),
+						settingSources: presetLocal.settingSources ?? ['project'],
+						sandboxOptions: { enabled: true },
 					};
 				}
 
@@ -203,9 +222,13 @@ export class CursorAgent implements INodeType {
 				}
 
 				try {
+					const baseSystem = params.systemMessage?.trim() ?? '';
+					const systemWithPreset = storedAgentId
+						? baseSystem
+						: appendPresetSystemMessage(baseSystem, permissionPreset);
 					const userPrompt = storedAgentId
 						? params.chatInput.trim()
-						: [params.systemMessage?.trim(), params.chatInput.trim()].filter(Boolean).join('\n\n---\n\n');
+						: [systemWithPreset, params.chatInput.trim()].filter(Boolean).join('\n\n---\n\n');
 
 					const assembler = new CursorStreamAssembler({
 						onBegin: async () => {

@@ -87,6 +87,37 @@ export const CURSOR_AGENT_OPTIONS_PROPERTY: INodeProperties = {
 			],
 		},
 		{
+			displayName: 'Agent Behavior',
+			name: 'agentBehavior',
+			type: 'collection',
+			placeholder: 'Configure Behavior',
+			default: {},
+			options: [
+				{
+					displayName: 'Permission Preset',
+					name: 'permissionPreset',
+					type: 'options',
+					default: 'full_agent',
+					options: [
+						{ name: 'MCP + Skills Only', value: 'mcp_skills_only' },
+						{ name: 'Plan — No Tools', value: 'plan_only' },
+						{ name: 'Restricted — Read/Web + MCP (Legacy)', value: 'customer_service' },
+						{ name: 'Strict Read Only (Legacy)', value: 'read_only' },
+						{ name: 'Full Cursor Agent Tools', value: 'full_agent' },
+					],
+					description:
+						'mcp_skills_only / plan_only 依赖 Skills Root 下 .cursor/cli.json（Linux 服务器不启用 sandbox）；Claude Agent 侧为 SDK 硬限制',
+				},
+				{
+					displayName: 'Max Turns',
+					name: 'maxTurns',
+					type: 'number',
+					default: 12,
+					description: 'Reserved for SDK parity (Cursor SDK 暂未接线)',
+				},
+			],
+		},
+		{
 			displayName: 'MCP',
 			name: 'mcp',
 			type: 'collection',
