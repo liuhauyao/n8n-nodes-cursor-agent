@@ -1,5 +1,7 @@
 import type { INodeProperties } from 'n8n-workflow';
 
+import { MCP_TOOL_FILTER_PROPERTIES } from './mcpToolFilterProperties';
+
 /** MCP 表单 + JSON 覆盖（n8n Options → MCP 子项） */
 export const MCP_SERVER_OPTION_PROPERTIES: INodeProperties[] = [
 	{
@@ -127,4 +129,5 @@ export const MCP_SERVER_OPTION_PROPERTIES: INodeProperties[] = [
 		default: '',
 		description: 'JSON object keyed by server name. When set, overrides the MCP Servers form above',
 	},
+	...MCP_TOOL_FILTER_PROPERTIES,
 ];

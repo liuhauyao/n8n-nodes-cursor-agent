@@ -1,6 +1,7 @@
 import { NodeOperationError, type IDataObject, type IExecuteFunctions, type INode } from 'n8n-workflow';
 import type { SettingSource } from '@cursor/sdk';
 
+import type { McpToolAccessConfig } from './mcpToolAccess';
 import type { McpServersFormValue } from './parseMcpServers';
 import { readRedisCredentials, type RedisCredentials } from './sessionStore';
 
@@ -19,6 +20,7 @@ export interface CursorAgentRunParams {
 	maxTurns: number;
 	mcpServersForm: McpServersFormValue;
 	mcpServersJson: string;
+	mcpToolAccess: McpToolAccessConfig;
 	hasWorkspaceConfig: boolean;
 }
 
@@ -94,6 +96,14 @@ export function readCursorAgentRunParams(
 	const mcpServersJson = pickString(mcp.mcpServersJson)
 		|| pickString(legacyAdditional.mcpServersJson);
 
+	const mcpToolAccessRaw = (mcp.mcpToolAccess ?? {}) as IDataObject;
+	const mcpToolAccess: McpToolAccessConfig = {
+		filterMode: (pickString(mcpToolAccessRaw.filterMode) || 'none') as McpToolAccessConfig['filterMode'],
+		deniedToolsRaw: pickString(mcpToolAccessRaw.deniedTools),
+		allowedToolsRaw: pickString(mcpToolAccessRaw.allowedTools),
+		allowComplementCatalogRaw: pickString(mcpToolAccessRaw.allowComplementCatalog),
+	};
+
 	const hasWorkspaceConfig = Boolean(
 		skillsRoot.trim()
 		|| workingDirectories.length > 0
@@ -115,6 +125,7 @@ export function readCursorAgentRunParams(
 		maxTurns: maxTurnsRaw,
 		mcpServersForm,
 		mcpServersJson,
+		mcpToolAccess,
 		hasWorkspaceConfig,
 	};
 }

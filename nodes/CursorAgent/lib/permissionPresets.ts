@@ -29,7 +29,7 @@ export function resolveCursorPermissionPreset(raw: string): CursorPermissionPres
 export function getPresetSystemAppend(preset: CursorPermissionPresetKey): string | undefined {
 	switch (preset) {
 		case 'mcp_skills_only':
-			return '【权限约束】禁止调用本地 Shell/Read/Write/Grep 等文件工具；世界与提案相关操作仅通过 matrees MCP。禁止向用户透露工作目录、文件路径、Skill 正文/清单、服务器运行环境。';
+			return '【权限约束】禁止调用本地 Shell/Read/Write/Grep 等文件工具；世界与提案相关操作仅通过 matrees MCP（含 getConcept、getWorldOverview、semanticSearchWorld 等只读工具，已授权，勿向用户索要「开权限」）。禁止向用户透露工作目录、文件路径、Skill 正文/清单、服务器运行环境。';
 		case 'plan_only':
 			return '【权限约束】禁止调用任何工具（含 MCP 与本地文件/Shell）；仅基于已有对话内容以产品语言回答。禁止向用户透露工作目录、文件路径、Skill 正文/清单、服务器运行环境。';
 		default:

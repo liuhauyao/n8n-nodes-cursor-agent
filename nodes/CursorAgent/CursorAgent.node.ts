@@ -11,6 +11,8 @@ import {
 import type { InteractionUpdate, LocalAgentOptions, SDKAgent } from '@cursor/sdk';
 
 import { CURSOR_AGENT_OPTIONS_PROPERTY } from './lib/agentOptionsProperties';
+import { applyMcpToolFilterToCliJson } from './lib/applyCliMcpPermissions';
+import { listMcpServerNames } from './lib/mcpToolAccess';
 import { parseMcpServers } from './lib/parseMcpServers';
 import { ensureCursorPlatform } from './lib/ensureCursorPlatform';
 import { loadCursorSdk } from './lib/loadCursorSdk';
@@ -168,6 +170,11 @@ export class CursorAgent implements INodeType {
 
 				if (permissionPreset === 'plan_only') {
 					mcpServers = {};
+				}
+
+				const mcpServerNames = listMcpServerNames(mcpServers);
+				if (params.skillsRoot && mcpServerNames.length > 0) {
+					applyMcpToolFilterToCliJson(params.skillsRoot, mcpServerNames, params.mcpToolAccess);
 				}
 
 				const agentOptions: {

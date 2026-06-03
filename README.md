@@ -86,6 +86,16 @@ Settings → Community Nodes → Install → 输入 `n8n-nodes-cursor-agent`
 
 **工作区约定：** `mcp_skills_only` / `plan_only` 时 Skills Root **仅**指向 skills 目录，勿挂载 `matrees-backend` 等源码路径。
 
+### MCP Tool Filter（Options → MCP）
+
+每次执行前将过滤规则合并进 **Skills Root** 下的 `.cursor/cli.json`（`Mcp(server:tool)` deny/allow）。
+
+| Filter Mode | 行为 |
+|-------------|------|
+| **No Filter**（默认） | 不修改 MCP 权限段 |
+| **Deny List** | 对列出的工具名写入 deny，并自动 `allow: Mcp(server:*)`（与 Claude ≥1.3.9 的 `mcp__server__*` 预批准对齐） |
+| **Allow List** | allow 列出项；可选 **Tool Catalog** 用于 deny 其余工具 |
+
 ### Skills
 
 将 skill 放在工作目录下的 `.cursor/skills/<skill-name>/SKILL.md`，并把 **Setting Sources** 包含 `project`（默认已选）。
