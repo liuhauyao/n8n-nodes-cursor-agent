@@ -164,6 +164,8 @@ Inline MCP 在 **create、resume、send** 时均需传入；本节点已自动�
 |------|------|
 | `thinking_start` / `thinking_chunk` / `thinking_end` | 思考过程 |
 | `text` | 正文增量 |
+| `text_reset` | 清空流式正文（工具/思考前丢弃过程过渡段） |
+| `text_replace` | 运行结束用规范化后的最终正文覆盖流式累积 |
 | `tool_start` / `tool_end` | 工具调用 |
 | `status` | 任务状态 |
 

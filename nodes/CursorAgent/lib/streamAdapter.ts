@@ -7,6 +7,7 @@ import {
 	mergeThinkingFromTimeline,
 } from './assistantTimeline';
 import { embedCursorMessageMeta } from './cursorMessageMeta';
+import { normalizeUserVisibleMarkdown } from './normalizeAgentMarkdown';
 import {
 	encodeCursorStreamPayload,
 	extractToolIdentity,
@@ -55,6 +56,10 @@ export class CursorStreamAssembler {
 	}
 
 	async end(): Promise<void> {
+		const final = normalizeUserVisibleMarkdown(this.getTextOutput());
+		if (final) {
+			await this.emit({ kind: 'text_replace', text: final });
+		}
 		await this.sink.onEnd();
 	}
 
@@ -66,8 +71,24 @@ export class CursorStreamAssembler {
 
 	getTextOutput(): string {
 		this.builder.finalize();
-		const markdown = lastMarkdownFromTimeline(this.builder.blocks);
-		return markdown || this.fallbackMarkdown;
+		let markdown = lastMarkdownFromTimeline(this.builder.blocks);
+		markdown = normalizeUserVisibleMarkdown(markdown || this.fallbackMarkdown);
+		if (!markdown) return '';
+
+		const suggestions = this.builder.suggestions;
+		if (suggestions.length) {
+			markdown += `\n\n<next>\n${suggestions.map((s) => `- ${s}`).join('\n')}\n</next>`;
+		}
+
+		const toolCalls = flattenToolCallsFromTimeline(this.builder.blocks);
+		if (toolCalls.length) {
+			const payload = {
+				toolCalls: toolCalls.map((t) => ({ ...t, done: true })),
+			};
+			markdown += `\n<cursor_meta>${JSON.stringify(payload)}</cursor_meta>`;
+		}
+
+		return markdown;
 	}
 
 	getOutput(): string {
@@ -77,6 +98,7 @@ export class CursorStreamAssembler {
 		if (!markdown && this.fallbackMarkdown) {
 			markdown = this.fallbackMarkdown;
 		}
+		markdown = normalizeUserVisibleMarkdown(markdown);
 		const thinking = mergeThinkingFromTimeline(timeline);
 		const hasTimelineThinking = timeline.some((b) => b.type === 'thinking');
 		return embedCursorMessageMeta(markdown, {
@@ -96,6 +118,9 @@ export class CursorStreamAssembler {
 				const chunk = sanitizeThinkingChunk(String(update.text ?? ''));
 				if (!chunk) return;
 				if (!this.thinkingStarted) {
+					if (this.builder.hasOpenMarkdownWithContent()) {
+						await this.emit({ kind: 'text_reset' });
+					}
 					this.thinkingStarted = true;
 					this.builder.onThinkingStart();
 					await this.emit({ kind: 'thinking_start' });
@@ -141,6 +166,10 @@ export class CursorStreamAssembler {
 		if (!shouldShowToolInUi(name)) return;
 		if (this.startedTools.has(callId)) return;
 		this.startedTools.add(callId);
+
+		if (this.builder.hasOpenMarkdownWithContent()) {
+			await this.emit({ kind: 'text_reset' });
+		}
 
 		const label = resolveToolLabel(name);
 		this.builder.onToolStart({

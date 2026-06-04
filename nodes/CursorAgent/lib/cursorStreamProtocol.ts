@@ -8,6 +8,10 @@ export type CursorStreamPayload =
 	| { kind: 'thinking_chunk'; text: string }
 	| { kind: 'thinking_end'; durationMs?: number }
 	| { kind: 'text'; text: string }
+	/** 工具/思考开始前清空流式正文累积（丢弃过程过渡段） */
+	| { kind: 'text_reset' }
+	/** 运行结束时用规范化后的最终正文覆盖流式累积 */
+	| { kind: 'text_replace'; text: string }
 	| { kind: 'status'; phase: string; message?: string };
 
 export function encodeCursorStreamPayload(payload: CursorStreamPayload): string {

@@ -180,6 +180,13 @@ export class AssistantTimelineBuilder {
 	private closeMarkdownSegment(): void {
 		this.openMarkdown = -1;
 	}
+
+	/** 当前是否有未闭合且非空的 markdown 段（用于流式 text_reset） */
+	hasOpenMarkdownWithContent(): boolean {
+		if (this.openMarkdown < 0) return false;
+		const block = this.blocks[this.openMarkdown] as AssistantMarkdownBlock;
+		return !!block.content?.trim();
+	}
 }
 
 export function flattenToolCallsFromTimeline(blocks: AssistantTimelineBlock[]): CursorToolCallMeta[] {
