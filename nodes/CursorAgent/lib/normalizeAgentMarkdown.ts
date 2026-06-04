@@ -1,6 +1,5 @@
 /**
- * 用户可见 Markdown 轻量规范化（与 matrees-ai preprocessMarkdown 对齐）。
- * 落库 textOutput / 流式 text_replace 前调用，降低 markstream 解析失败率。
+ * 用户可见 Markdown 轻量规范化；落库 textOutput / 流式 text_replace 前调用。
  */
 
 /** ATX 标题 # 后补空格 */

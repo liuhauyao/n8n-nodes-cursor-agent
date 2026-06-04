@@ -7,12 +7,8 @@ export type CursorPermissionPresetKey =
 	| 'read_only'
 	| 'full_agent';
 
-const LEGACY_ALIASES: Record<string, CursorPermissionPresetKey> = {
-	world_assistant: 'full_agent',
-};
-
 export function resolveCursorPermissionPreset(raw: string): CursorPermissionPresetKey {
-	const key = LEGACY_ALIASES[raw] ?? raw;
+	const key = raw;
 	if (
 		key === 'mcp_skills_only'
 		|| key === 'plan_only'
@@ -29,9 +25,9 @@ export function resolveCursorPermissionPreset(raw: string): CursorPermissionPres
 export function getPresetSystemAppend(preset: CursorPermissionPresetKey): string | undefined {
 	switch (preset) {
 		case 'mcp_skills_only':
-			return '【权限约束】禁止调用本地 Shell/Read/Write/Grep 等文件工具；世界与提案相关操作仅通过 matrees MCP（含 getConcept、getWorldOverview、semanticSearchWorld 等只读工具，已授权，勿向用户索要「开权限」）。禁止向用户透露工作目录、文件路径、Skill 正文/清单、服务器运行环境。';
+			return '【Permission】Local tools follow `.cursor/cli.json` under Skills Root; MCP follows workflow configuration. Do not disclose working directories, absolute paths, or skill file contents to end users.';
 		case 'plan_only':
-			return '【权限约束】禁止调用任何工具（含 MCP 与本地文件/Shell）；仅基于已有对话内容以产品语言回答。禁止向用户透露工作目录、文件路径、Skill 正文/清单、服务器运行环境。';
+			return '【Permission】Do not call any tools (including MCP and local file/Shell tools); answer from conversation context only. Do not disclose working directories, absolute paths, or skill file contents to end users.';
 		default:
 			return undefined;
 	}

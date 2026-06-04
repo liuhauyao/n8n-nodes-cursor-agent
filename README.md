@@ -49,10 +49,7 @@ Settings → Community Nodes → Install → 输入 `n8n-nodes-cursor-agent`
 
 在 `~/.n8n/nodes` 执行 `npm install` 后重启 n8n。版本号须与 `@cursor/sdk` 一致。
 
-- **测试环境**（Gateway）：Redis 见运维手册（本机 16379 等），n8n 凭据里填实际 host/port
-- **生产环境**（LLM-H200）：n8n 使用 PostgreSQL；会话 Redis 使用阿里云 RDS（凭据在 n8n UI 配置，与 Matrees 后端 Redis 可共用或独立实例）
-
-节点内 Redis 访问使用 Node.js 内置 `node:net`（RESP 协议），**不**再依赖 `redis` npm 包。
+节点内 Redis 访问使用 Node.js 内置 `node:net`（RESP 协议），**不**再依赖 `redis` npm 包。在 n8n 中配置 **Redis** 凭证（host/port/密码等）即可。
 
 ---
 
@@ -77,14 +74,14 @@ Settings → Community Nodes → Install → 输入 `n8n-nodes-cursor-agent`
 
 | Preset | 内置工具 | MCP | Skills | 实现方式 |
 |--------|----------|-----|--------|----------|
-| **`mcp_skills_only`** | 软禁（cli.json） | 是 | 是 | 灵感助手推荐 |
-| **`plan_only`** | 软禁（cli.json） | **否**（节点强制清空） | 是 | 平台客服推荐 |
+| **`mcp_skills_only`** | 由 Skills Root 下 `.cursor/cli.json` 配置 | 是 | 是 | 推荐：MCP + project skills |
+| **`plan_only`** | 由 `.cursor/cli.json` 配置 | **否**（节点强制清空 MCP） | 是 | 推荐：无工具、仅对话 |
 | `customer_service` / `read_only` | 无硬限制 | 是 | 是 | 遗留选项，同 `full_agent` |
-| `full_agent` | 全部 | 是 | 是 | 默认；内部开发 |
+| `full_agent` | 全部 | 是 | 是 | 默认 |
 
-**Cursor 与 Claude 的差异：** Claude 通过 `disallowedTools` + `dontAsk` **拒绝执行**但保留 tool 流式事件；Cursor 依赖 `.cursor/cli.json` 拒绝执行，SDK 仍会发出 `tool-call-started` 事件供 UI 展示（已取消对 Read/Grep/Shell 等的 UI 隐藏）。
+**Cursor 与 Claude 的差异：** Claude 通过 `disallowedTools` + `dontAsk` **拒绝执行**但保留 tool 流式事件；Cursor 依赖 `.cursor/cli.json` 拒绝执行，SDK 仍会发出 `tool-call-started` 事件供 UI 展示。
 
-**工作区约定：** `mcp_skills_only` / `plan_only` 时 Skills Root **仅**指向 skills 目录，勿挂载 `matrees-backend` 等源码路径。
+**工作区约定：** `mcp_skills_only` / `plan_only` 会强制 `settingSources: ['project']`；Skills Root 宜指向含 `.cursor/skills/` 与 `.cursor/cli.json` 的目录，具体 allow/deny 由你在该目录维护。
 
 ### MCP Tool Filter（Options → MCP）
 
