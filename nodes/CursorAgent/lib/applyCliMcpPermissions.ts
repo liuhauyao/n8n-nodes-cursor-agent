@@ -19,25 +19,9 @@ type CliConfig = {
 	permissions: CliPermissions;
 };
 
-const LOCAL_SHELL_DENY = [
-	'Shell(*)',
-	'Write(*)',
-	'Read(*)',
-	'Grep(*)',
-	'Glob(*)',
-	'WebFetch(*)',
-	'Edit(*)',
-] as const;
-
 function readCliConfig(cliPath: string): CliConfig {
 	if (!fs.existsSync(cliPath)) {
-		return {
-			version: 1,
-			permissions: {
-				allow: [],
-				deny: [...LOCAL_SHELL_DENY],
-			},
-		};
+		return { version: 1, permissions: { allow: [], deny: [] } };
 	}
 	const raw = fs.readFileSync(cliPath, 'utf8');
 	const parsed = JSON.parse(raw) as CliConfig;
@@ -78,7 +62,6 @@ export function applyMcpToolFilterToCliJson(
 	const config = readCliConfig(cliPath);
 
 	const denySet = new Set([
-		...LOCAL_SHELL_DENY,
 		...(config.permissions.deny ?? []),
 	]);
 
