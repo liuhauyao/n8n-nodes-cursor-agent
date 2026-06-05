@@ -146,8 +146,8 @@ Inline MCP 在 **create、resume、send** 时均需传入；本节点已自动�
 
 | 字段 | 说明 |
 |------|------|
-| `output` | 带 `<cursor_meta>` 的完整输出（含 timeline / suggestions） |
-| `textOutput` | 纯 Markdown 正文 |
+| `output` | 完整落库正文：Markdown + `<next>`（若有建议）+ `<cursor_meta>`（toolCalls / timeline / suggestions） |
+| `textOutput` | 纯 Markdown 正文（无 `<next>`、无 `<cursor_meta>`，供生图等下游直接使用） |
 | `model` | 使用的模型 id |
 | `agentId` | Cursor agent id |
 | `runId` | 本次 run id |
@@ -170,7 +170,7 @@ Inline MCP 在 **create、resume、send** 时均需传入；本节点已自动�
 
 | 字段 | 说明 |
 |------|------|
-| `output` | 带 timeline 元数据的完整输出 |
+| `output` | 完整落库正文：Markdown + `<next>` + `<cursor_meta>` |
 | `textOutput` | 纯 Markdown 正文 |
 | `model` | 使用的模型 id |
 | `agentId` | Cursor agent id |

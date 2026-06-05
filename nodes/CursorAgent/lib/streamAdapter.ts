@@ -6,7 +6,7 @@ import {
 	lastMarkdownFromTimeline,
 	mergeThinkingFromTimeline,
 } from './assistantTimeline';
-import { embedCursorMessageMeta } from './cursorMessageMeta';
+import { embedCursorMessageMeta, stripCursorMessageMeta } from './cursorMessageMeta';
 import { normalizeUserVisibleMarkdown } from './normalizeAgentMarkdown';
 import {
 	encodeCursorStreamPayload,
@@ -15,6 +15,7 @@ import {
 	sanitizeThinkingChunk,
 	shouldShowToolInUi,
 	shouldSuppressAssistantText,
+	stripNextTags,
 	type CursorStreamPayload,
 } from './cursorStreamProtocol';
 
@@ -40,7 +41,7 @@ export interface StreamSink {
 }
 
 /**
- * 按 timeline 顺序组装紧凑 __cursor__ 流事件；落库为 markdown + cursor_meta（与流式 UI 同序）。
+ * 按 timeline 顺序组装紧凑 __cursor__ 流事件；`textOutput` 仅正文，`output` 含 cursor_meta（与流式 UI 同序）。
  */
 export class CursorStreamAssembler {
 	private readonly builder = new AssistantTimelineBuilder();
@@ -73,22 +74,7 @@ export class CursorStreamAssembler {
 		this.builder.finalize();
 		let markdown = lastMarkdownFromTimeline(this.builder.blocks);
 		markdown = normalizeUserVisibleMarkdown(markdown || this.fallbackMarkdown);
-		if (!markdown) return '';
-
-		const suggestions = this.builder.suggestions;
-		if (suggestions.length) {
-			markdown += `\n\n<next>\n${suggestions.map((s) => `- ${s}`).join('\n')}\n</next>`;
-		}
-
-		const toolCalls = flattenToolCallsFromTimeline(this.builder.blocks);
-		if (toolCalls.length) {
-			const payload = {
-				toolCalls: toolCalls.map((t) => ({ ...t, done: true })),
-			};
-			markdown += `\n<cursor_meta>${JSON.stringify(payload)}</cursor_meta>`;
-		}
-
-		return markdown;
+		return stripNextTags(stripCursorMessageMeta(markdown)).trim();
 	}
 
 	getOutput(): string {
@@ -99,6 +85,10 @@ export class CursorStreamAssembler {
 			markdown = this.fallbackMarkdown;
 		}
 		markdown = normalizeUserVisibleMarkdown(markdown);
+		const suggestions = this.builder.suggestions;
+		if (suggestions.length) {
+			markdown += `\n\n<next>\n${suggestions.map((s) => `- ${s}`).join('\n')}\n</next>`;
+		}
 		const thinking = mergeThinkingFromTimeline(timeline);
 		const hasTimelineThinking = timeline.some((b) => b.type === 'thinking');
 		return embedCursorMessageMeta(markdown, {
@@ -106,7 +96,7 @@ export class CursorStreamAssembler {
 			toolCalls: flattenToolCallsFromTimeline(timeline),
 			thinkingDurationMs: this.thinkingDurationMs,
 			thinking: hasTimelineThinking ? undefined : thinking || undefined,
-			suggestions: this.builder.suggestions,
+			suggestions,
 		});
 	}
 
