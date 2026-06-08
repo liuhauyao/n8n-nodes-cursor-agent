@@ -29,7 +29,12 @@ import {
 	resolveCursorPermissionPreset,
 } from './lib/permissionPresets';
 import { CursorStreamAssembler } from './lib/streamAdapter';
-import { getStoredAgentId, setStoredAgentId } from './lib/sessionStore';
+import {
+	clearStoredAgentId,
+	getStoredAgentId,
+	isStaleAgentSessionError,
+	setStoredAgentId,
+} from './lib/sessionStore';
 
 const DEFAULT_MODEL = 'composer-2.5';
 const STATIC_MODEL_IDS = ['composer-2.5', 'composer-2', 'composer-1'] as const;
@@ -222,18 +227,28 @@ export class CursorAgent implements INodeType {
 					: undefined;
 
 				let agent: SDKAgent;
+				let resumedSession = false;
 				if (storedAgentId) {
-					agent = await Agent.resume(storedAgentId, agentOptions);
+					try {
+						agent = await Agent.resume(storedAgentId, agentOptions);
+						resumedSession = true;
+					} catch (resumeError) {
+						if (!isStaleAgentSessionError(resumeError) || !params.sessionId || !redis) {
+							throw resumeError;
+						}
+						await clearStoredAgentId(redis, params.sessionId);
+						agent = await Agent.create(agentOptions);
+					}
 				} else {
 					agent = await Agent.create(agentOptions);
 				}
 
 				try {
 					const baseSystem = params.systemMessage?.trim() ?? '';
-					const systemWithPreset = storedAgentId
+					const systemWithPreset = resumedSession
 						? baseSystem
 						: appendPresetSystemMessage(baseSystem, permissionPreset);
-					const userPrompt = storedAgentId
+					const userPrompt = resumedSession
 						? params.chatInput.trim()
 						: [systemWithPreset, params.chatInput.trim()].filter(Boolean).join('\n\n---\n\n');
 
